@@ -1,23 +1,28 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
 
 // Remember to rename these classes and interfaces!
 
 interface MyPluginSettings {
-	mySetting: string;
+	timeInterval: number;	// Time interval in minutes
+	wordCountThreshold: number;	// Word Count Threshold
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+	timeInterval: 5,	// Default to 5 minutes
+	wordCountThreshold: 500, // Default to 500 words
 }
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
+	timer: number | null = null;
 
 	async onload() {
 		await this.loadSettings();
 
+		this.startTimer();
+
 		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
+		const ribbonIconEl = this.addRibbonIcon('dice', 'ANT Plugin', (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
 			new Notice('This is a notice!');
 		});
@@ -66,7 +71,7 @@ export default class MyPlugin extends Plugin {
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(new MyPlugginSettingTab(this.app, this));
 
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
@@ -76,6 +81,10 @@ export default class MyPlugin extends Plugin {
 
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
 		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+
+		this.registerEvent(this.app.vault.on('modify', (file: TFile) => {
+			this.handleNoteChange(file);
+		}));
 	}
 
 	onunload() {
@@ -89,6 +98,37 @@ export default class MyPlugin extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	async handleNoteChange(file: TFile) {
+		// Get the content of the file
+		const content = await this.app.vault.read(file);
+		//Split the content into words and count them
+		const wordCount = content.split(/\s+/).filter(Boolean).length;
+
+		//Check if the word count exceeds the threshold
+		if (wordCount >= this.settings.wordCountThreshold) {
+			// Trigget the quiz
+			this.triggerQuiz();
+			// Reset or adjust logic as needed to prevent continous triggering
+		}
+	}
+	
+	startTimer() {
+		// Clear any existing timer to avoid duplicates
+		if(this.timer !== null) clearTimeout(this.timer);
+
+		this.timer = window.setTimeout(() => {
+			// Trigger the quiz
+			this.triggerQuiz();
+		}, this.settings.timeInterval * 60000);	// Convert minutes to milliseconds
+	}
+
+	triggerQuiz() {
+		//Logic to generate or select a quiz question
+		console.log("Quiz triggered!");
+
+		// For now, just log a message. Replace this with actual quiz logic
+	}
 }
 
 class SampleModal extends Modal {
@@ -97,17 +137,17 @@ class SampleModal extends Modal {
 	}
 
 	onOpen() {
-		const {contentEl} = this;
+		const { contentEl } = this;
 		contentEl.setText('Woah!');
 	}
 
 	onClose() {
-		const {contentEl} = this;
+		const { contentEl } = this;
 		contentEl.empty();
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
+class MyPlugginSettingTab extends PluginSettingTab {
 	plugin: MyPlugin;
 
 	constructor(app: App, plugin: MyPlugin) {
@@ -116,18 +156,31 @@ class SampleSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
+		// Time Interval Setting
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
+			.setName('Time Interval for Quiz Trigger')
+			.setDesc('Time Interval in minutes after which a quiz will be triggered.')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setPlaceholder('Enter time in minutes')
+				.setValue(this.plugin.settings.timeInterval.toString())
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.timeInterval = parseInt(value);
+					await this.plugin.saveSettings();
+				}));
+
+		// Word Count Threshold Setting
+		new Setting(containerEl)
+			.setName('Word Count Threshold for Quiz Trigger')
+			.setDesc('Number of words added before a quiz is triggered')
+			.addText(text => text
+				.setPlaceholder('Enter word count')
+				.setValue(this.plugin.settings.wordCountThreshold.toString())
+				.onChange(async (value) => {
+					this.plugin.settings.wordCountThreshold = parseInt(value);
 					await this.plugin.saveSettings();
 				}));
 	}
